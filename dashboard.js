@@ -88,6 +88,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     updateChart(); // Refresh the chart dynamically
   }
 });
+// Reload dashboard when user returns to it
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+      location.reload();
+  }
+});
+
+
 document.getElementById("resetButton").addEventListener("click", () => {
   chrome.storage.local.set({ timeData: {} }, () => {
     console.log("Time data reset");

@@ -1,24 +1,21 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TabWatch Dashboard</title>
-    <script src="libs/chart.js"></script> <!-- Ensure you have this file -->
+    <script src="libs/chart.js"></script>
+    <!-- Ensure you have this file -->
     <script src="dashboard.js" defer></script>
-    <style>
-        body { font-family: Arial, sans-serif; text-align: center; }
-        canvas { max-width: 600px; margin: 20px auto; }
-        ul { list-style: none; padding: 0; }
-        li { margin: 5px 0; }
-    </style>
-</head>
-<body>
+    <link rel="stylesheet" href="dashboard.css" />
+
+  </head>
+  <body>
     <h1>TabWatch Dashboard</h1>
     <p id="status">Loading data...</p>
     <canvas id="timeChart"></canvas>
     <h2>Tracked Websites</h2>
     <ul id="siteList"></ul>
     <button id="resetButton">Reset Data</button>
-</body>
+  </body>
 </html>

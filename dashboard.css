@@ -1,0 +1,89 @@
+/* General Page Styling */
+body {
+    font-family: 'Poppins', sans-serif;
+    background: linear-gradient(135deg, #1e3c72, #2a5298);
+    color: #fff;
+    text-align: center;
+    padding: 20px;
+}
+
+/* Container Box */
+.container {
+    max-width: 850px;
+    margin: auto;
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+/* Header */
+h1 {
+    font-size: 24px;
+    margin-bottom: 15px;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+/* Chart Styling */
+.chart-container {
+    position: relative;
+    width: 100%;
+    max-width: 700px;  /* Adjusted to prevent full screen coverage */
+    margin: 20px auto;
+    background: rgba(255, 255, 255, 0.2);
+    padding: 15px;
+    border-radius: 10px;
+}
+
+/* Making sure the chart doesn't overflow */
+canvas {
+    width: 100% !important;
+    height: auto !important;
+}
+
+/* Data Text Styling (For Readability) */
+#timeDataDisplay {
+    font-size: 16px;
+    font-weight: 500;
+    color: #f8f8f8;  /* Improved contrast */
+    background: rgba(0, 0, 0, 0.4);
+    padding: 10px;
+    margin-top: 10px;
+    border-radius: 8px;
+}
+
+/* Buttons */
+button {
+    background: #ff7b00;
+    color: white;
+    padding: 12px 20px;
+    font-size: 14px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    margin: 10px 5px;
+    transition: 0.3s ease-in-out;
+}
+
+button:hover {
+    background: #e66b00;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .container {
+        width: 90%;
+    }
+    h1 {
+        font-size: 20px;
+    }
+    .chart-container {
+        max-width: 90%;
+    }
+}
+
+
+
+
