@@ -1,0 +1,32 @@
+body {
+  font-family: Arial, sans-serif;
+  width: 250px;
+  padding: 10px;
+  text-align: center;
+}
+h1 {
+  font-size: 18px;
+  margin-bottom: 10px;
+}
+ul {
+  list-style-type: none;
+  padding: 0;
+  margin-bottom: 10px;
+}
+li {
+  font-size: 14px;
+  margin: 5px 0;
+}
+button {
+  background-color: red;
+  color: white;
+  border: none;
+  padding: 8px;
+  cursor: pointer;
+  width: 100%;
+  font-size: 14px;
+}
+button:disabled {
+  background-color: grey;
+  cursor: not-allowed;
+}
