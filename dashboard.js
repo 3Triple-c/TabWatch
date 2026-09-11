@@ -4,6 +4,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const list = document.getElementById("siteList");
   const resetButton = document.getElementById("resetButton");
   let chart = null;
+  let renderQueued = false;
 
   function formatTime(seconds) {
     const hrs = Math.floor(seconds / 3600);
@@ -51,7 +52,12 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderDashboard() {
+    if (renderQueued) return;
+    renderQueued = true;
+
     chrome.runtime.sendMessage({ action: "getTimeData" }, (timeData) => {
+      renderQueued = false;
+
       if (chrome.runtime.lastError) {
         status.innerText = "Unable to load time data.";
         return;
@@ -89,11 +95,12 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   resetButton.addEventListener("click", () => {
-    chrome.storage.local.set({ timeData: {} }, () => {
-      if (chrome.runtime.lastError) {
+    chrome.runtime.sendMessage({ action: "resetTimeData" }, (response) => {
+      if (chrome.runtime.lastError || !response?.success) {
         status.innerText = "Unable to reset time data.";
         return;
       }
+
       renderDashboard();
     });
   });
