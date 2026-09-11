@@ -1,108 +1,142 @@
+const ACTIVE_SESSION_KEY = "activeSession";
+const TIME_DATA_KEY = "timeData";
 
-let activeTabId = null;
-let activeDomain = null;
-let startTime = Date.now();
-let interval = null; // Interval for real-time updates
+function getDomain(url) {
+    if (!url) return null;
 
-function updateStoredTime() {
-    if (!activeDomain || !startTime) return;
-
-    let timeSpent = Math.floor((Date.now() - startTime) / 1000); // Convert ms to secs
-    if (timeSpent < 1) return; // Ignore very short times
-
-    chrome.storage.local.get(["timeData"], (result) => {
-        let timeData = result.timeData || {};
-        timeData[activeDomain] = (timeData[activeDomain] || 0) + timeSpent;
-
-        chrome.storage.local.set({ timeData }, () => {
-            console.log(`Updated: ${activeDomain} - ${timeData[activeDomain]} secs`);
-        });
-    });
-
-    startTime = Date.now(); // Reset timer for the next session
+    try {
+        const parsedUrl = new URL(url);
+        if (!/^https?:$/.test(parsedUrl.protocol)) return null;
+        return parsedUrl.hostname || null;
+    } catch {
+        return null;
+    }
 }
 
-// Function to start real-time tracking
-function startRealTimeTracking() {
-    if (interval) clearInterval(interval);
-    interval = setInterval(() => {
-        updateStoredTime(); // Update storage every second
-    }, 1000);
+async function getActiveSession() {
+    const result = await chrome.storage.local.get(ACTIVE_SESSION_KEY);
+    return result[ACTIVE_SESSION_KEY] || null;
 }
 
-// Function to handle tab changes
-function handleTabChange(tabId) {
-    chrome.tabs.get(tabId, (tab) => {
-        if (chrome.runtime.lastError || !tab || !tab.url) return;
-
-        let url = new URL(tab.url);
-        let domain = url.hostname;
-
-        if (activeTabId !== tabId) {
-            updateStoredTime(); // Save time for the previous tab
-            activeDomain = domain;
-            activeTabId = tabId;
-            startTime = Date.now();
-            startRealTimeTracking(); // Start real-time updates
-            console.log(`Switched to: ${domain}`);
-        }
-    });
-}
-
-// Listen for tab activation
-chrome.tabs.onActivated.addListener((activeInfo) => {
-    handleTabChange(activeInfo.tabId);
-});
-
-// Listen for window focus changes
-chrome.windows.onFocusChanged.addListener((windowId) => {
-    if (windowId === chrome.windows.WINDOW_ID_NONE) {
-        updateStoredTime();
-        if (interval) clearInterval(interval);
-        activeDomain = null;
-        activeTabId = null;
+async function saveActiveSession(session) {
+    if (session) {
+        await chrome.storage.local.set({ [ACTIVE_SESSION_KEY]: session });
     } else {
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            if (tabs.length > 0) {
-                handleTabChange(tabs[0].id);
-            }
-        });
+        await chrome.storage.local.remove(ACTIVE_SESSION_KEY);
     }
-});
+}
 
-// Handle requests for time data from popup.js
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.action === "getTimeData") {
-        chrome.storage.local.get(["timeData"], (result) => {
-            sendResponse(result.timeData || {});
-        });
-        return true;
-    }
-});
-// function updateTimeData(url, timeSpent) {
-//     chrome.storage.local.get("timeData", (data) => {
-//         let timeData = data.timeData || [];
-        
-//         let existingEntry = timeData.find(entry => entry.url === url);
-//         if (existingEntry) {
-//             existingEntry.timeSpent += timeSpent;
-//         } else {
-//             timeData.push({ url, timeSpent });
-//         }
+async function recordElapsedTime(session) {
+    if (!session?.domain || !session.startTime) return;
 
-//         chrome.storage.local.set({ timeData }, () => {
-//             console.log("Time data updated:", timeData);
-//             chrome.runtime.sendMessage({ action: "updateDashboard" });
-//         });
-//     });
-// }
-function saveTimeData(url, timeSpent) {
-    chrome.storage.local.get(["timeData"], function (result) {
-        let timeData = result.timeData || {};
-        timeData[url] = (timeData[url] || 0) + timeSpent; // Add time
+    const elapsedSeconds = Math.floor((Date.now() - session.startTime) / 1000);
+    if (elapsedSeconds < 1) return;
 
-        chrome.storage.local.set({ timeData });
+    const result = await chrome.storage.local.get(TIME_DATA_KEY);
+    const timeData = result[TIME_DATA_KEY] || {};
+    timeData[session.domain] = (timeData[session.domain] || 0) + elapsedSeconds;
+
+    await chrome.storage.local.set({
+        [TIME_DATA_KEY]: timeData,
+        [ACTIVE_SESSION_KEY]: {
+            ...session,
+            startTime: Date.now(),
+        },
     });
 }
 
+async function stopTracking() {
+    const session = await getActiveSession();
+    if (!session) return;
 
+    await recordElapsedTime(session);
+    await saveActiveSession(null);
+}
+
+async function startTracking(tabId) {
+    try {
+        const tab = await chrome.tabs.get(tabId);
+        const domain = getDomain(tab.url);
+        const currentSession = await getActiveSession();
+
+        if (
+            currentSession?.tabId === tabId &&
+            currentSession?.domain === domain
+        ) {
+            return;
+        }
+
+        if (currentSession) {
+            await recordElapsedTime(currentSession);
+        }
+
+        if (!domain) {
+            await saveActiveSession(null);
+            return;
+        }
+
+        await saveActiveSession({
+            tabId,
+            domain,
+            startTime: Date.now(),
+        });
+    } catch (error) {
+        console.error("Unable to start tracking:", error);
+    }
+}
+
+async function trackFocusedTab(windowId) {
+    if (windowId === chrome.windows.WINDOW_ID_NONE) {
+        await stopTracking();
+        return;
+    }
+
+    const tabs = await chrome.tabs.query({
+        active: true,
+        windowId,
+    });
+
+    if (tabs[0]?.id != null) {
+        await startTracking(tabs[0].id);
+    }
+}
+
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+    startTracking(tabId);
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+    if (changeInfo.url) {
+        startTracking(tabId);
+    }
+});
+
+chrome.windows.onFocusChanged.addListener((windowId) => {
+    trackFocusedTab(windowId);
+});
+
+chrome.runtime.onStartup.addListener(async () => {
+    const windows = await chrome.windows.getLastFocused({ populate: false });
+    if (windows?.id != null) {
+        await trackFocusedTab(windows.id);
+    }
+});
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action !== "getTimeData") return;
+
+    (async () => {
+        const session = await getActiveSession();
+        if (session) {
+            await recordElapsedTime(session);
+        }
+
+        const result = await chrome.storage.local.get(TIME_DATA_KEY);
+        sendResponse(result[TIME_DATA_KEY] || {});
+    })().catch((error) => {
+        console.error("Unable to read time data:", error);
+        sendResponse({});
+    });
+
+    return true;
+});
