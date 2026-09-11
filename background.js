@@ -143,8 +143,20 @@ chrome.windows.onFocusChanged.addListener((windowId) => {
 chrome.runtime.onStartup.addListener(() => {
     queueTracking(async () => {
         const window = await chrome.windows.getLastFocused({ populate: false });
-        if (window?.id != null) {
-            await trackFocusedTab(window.id);
+        if (window?.id == null || window.id === chrome.windows.WINDOW_ID_NONE) {
+            await stopTracking();
+            return;
+        }
+
+        const tabs = await chrome.tabs.query({
+            active: true,
+            windowId: window.id,
+        });
+
+        if (tabs[0]?.id != null) {
+            await startTracking(tabs[0].id);
+        } else {
+            await stopTracking();
         }
     });
 });
@@ -155,7 +167,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     queueTracking(async () => {
         const window = await chrome.windows.getLastFocused({ populate: false });
 
-        if (window?.id === chrome.windows.WINDOW_ID_NONE || window?.id == null) {
+        if (window?.id == null || window.id === chrome.windows.WINDOW_ID_NONE) {
             await stopTracking();
         } else {
             const tabs = await chrome.tabs.query({
