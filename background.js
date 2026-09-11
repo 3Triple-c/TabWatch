@@ -56,58 +56,49 @@ async function stopTracking() {
 }
 
 async function startTracking(tabId) {
-    try {
-        const tab = await chrome.tabs.get(tabId);
-        const window = await chrome.windows.get(tab.windowId);
+    const tab = await chrome.tabs.get(tabId);
+    const window = await chrome.windows.get(tab.windowId);
 
-        // Only track the tab the user is actually viewing.
-        if (!tab.active || !window.focused) {
-            return;
-        }
-
-        const domain = getDomain(tab.url);
-        const currentSession = await getActiveSession();
-
-        if (
-            currentSession?.tabId === tabId &&
-            currentSession?.domain === domain &&
-            currentSession?.windowId === tab.windowId
-        ) {
-            return;
-        }
-
-        if (currentSession) {
-            await recordElapsedTime(currentSession);
-        }
-
-        if (!domain) {
-            await saveActiveSession(null);
-            return;
-        }
-
-        await saveActiveSession({
-            tabId,
-            windowId: tab.windowId,
-            domain,
-            startTime: Date.now(),
-        });
-    } catch (error) {
-        console.error("Unable to start tracking:", error);
+    // Only track the tab the user is actually viewing.
+    if (!tab.active || !window.focused) {
+        return;
     }
+
+    const domain = getDomain(tab.url);
+    const currentSession = await getActiveSession();
+
+    if (
+        currentSession?.tabId === tabId &&
+        currentSession?.domain === domain &&
+        currentSession?.windowId === tab.windowId
+    ) {
+        return;
+    }
+
+    if (currentSession) {
+        await recordElapsedTime(currentSession);
+    }
+
+    if (!domain) {
+        await saveActiveSession(null);
+        return;
+    }
+
+    await saveActiveSession({
+        tabId,
+        windowId: tab.windowId,
+        domain,
+        startTime: Date.now(),
+    });
 }
 
 function queueTracking(operation) {
-    trackingQueue = trackingQueue
-        .then(operation, operation)
-        .catch((error) => {
-            console.error("Tracking operation failed:", error);
-        });
-
+    trackingQueue = trackingQueue.then(operation, operation);
     return trackingQueue;
 }
 
 function trackFocusedTab(windowId) {
-    return queueTracking(async () => {
+    queueTracking(async () => {
         if (windowId === chrome.windows.WINDOW_ID_NONE) {
             await stopTracking();
             return;
@@ -123,16 +114,22 @@ function trackFocusedTab(windowId) {
         } else {
             await stopTracking();
         }
+    }).catch((error) => {
+        console.error("Tracking operation failed:", error);
     });
 }
 
 chrome.tabs.onActivated.addListener(({ tabId }) => {
-    queueTracking(() => startTracking(tabId));
+    queueTracking(() => startTracking(tabId)).catch((error) => {
+        console.error("Tracking operation failed:", error);
+    });
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
     if (changeInfo.url) {
-        queueTracking(() => startTracking(tabId));
+        queueTracking(() => startTracking(tabId)).catch((error) => {
+            console.error("Tracking operation failed:", error);
+        });
     }
 });
 
@@ -158,6 +155,8 @@ chrome.runtime.onStartup.addListener(() => {
         } else {
             await stopTracking();
         }
+    }).catch((error) => {
+        console.error("Tracking operation failed:", error);
     });
 });
 
