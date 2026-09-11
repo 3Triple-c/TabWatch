@@ -162,6 +162,28 @@ chrome.runtime.onStartup.addListener(() => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === "resetTimeData") {
+        queueTracking(async () => {
+            const session = await getActiveSession();
+
+            await chrome.storage.local.set({ [TIME_DATA_KEY]: {} });
+
+            if (session) {
+                await saveActiveSession({
+                    ...session,
+                    startTime: Date.now(),
+                });
+            }
+
+            sendResponse({ success: true });
+        }).catch((error) => {
+            console.error("Unable to reset time data:", error);
+            sendResponse({ success: false });
+        });
+
+        return true;
+    }
+
     if (message.action !== "getTimeData") return;
 
     queueTracking(async () => {
