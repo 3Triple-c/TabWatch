@@ -4,7 +4,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const list = document.getElementById("siteList");
   const resetButton = document.getElementById("resetButton");
   let chart = null;
-  let renderQueued = false;
+  let renderInProgress = false;
+  let renderPending = false;
 
   function formatTime(seconds) {
     const hrs = Math.floor(seconds / 3600);
@@ -52,33 +53,40 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderDashboard() {
-    if (renderQueued) return;
-    renderQueued = true;
+    if (renderInProgress) {
+      renderPending = true;
+      return;
+    }
+
+    renderInProgress = true;
+    renderPending = false;
 
     chrome.runtime.sendMessage({ action: "getTimeData" }, (timeData) => {
-      renderQueued = false;
+      renderInProgress = false;
 
       if (chrome.runtime.lastError) {
         status.innerText = "Unable to load time data.";
-        return;
-      }
+      } else {
+        const sites = Object.keys(timeData || {});
+        const times = sites.map((site) => timeData[site]);
 
-      const sites = Object.keys(timeData || {});
-      const times = sites.map((site) => timeData[site]);
-
-      if (sites.length === 0) {
-        status.innerText = "No time data available.";
-        list.innerHTML = "";
-        if (chart) {
-          chart.destroy();
-          chart = null;
+        if (sites.length === 0) {
+          status.innerText = "No time data available.";
+          list.innerHTML = "";
+          if (chart) {
+            chart.destroy();
+            chart = null;
+          }
+        } else {
+          status.innerText = "";
+          renderChart(sites, times);
+          renderList(sites, times);
         }
-        return;
       }
 
-      status.innerText = "";
-      renderChart(sites, times);
-      renderList(sites, times);
+      if (renderPending) {
+        renderDashboard();
+      }
     });
   }
 
