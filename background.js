@@ -1,6 +1,8 @@
 const ACTIVE_SESSION_KEY = "activeSession";
 const TIME_DATA_KEY = "timeData";
 
+let trackingQueue = Promise.resolve();
+
 function getDomain(url) {
     if (!url) return null;
 
@@ -56,12 +58,20 @@ async function stopTracking() {
 async function startTracking(tabId) {
     try {
         const tab = await chrome.tabs.get(tabId);
+        const window = await chrome.windows.get(tab.windowId);
+
+        // Only track the tab the user is actually viewing.
+        if (!tab.active || !window.focused) {
+            return;
+        }
+
         const domain = getDomain(tab.url);
         const currentSession = await getActiveSession();
 
         if (
             currentSession?.tabId === tabId &&
-            currentSession?.domain === domain
+            currentSession?.domain === domain &&
+            currentSession?.windowId === tab.windowId
         ) {
             return;
         }
@@ -77,6 +87,7 @@ async function startTracking(tabId) {
 
         await saveActiveSession({
             tabId,
+            windowId: tab.windowId,
             domain,
             startTime: Date.now(),
         });
@@ -85,29 +96,43 @@ async function startTracking(tabId) {
     }
 }
 
-async function trackFocusedTab(windowId) {
-    if (windowId === chrome.windows.WINDOW_ID_NONE) {
-        await stopTracking();
-        return;
-    }
+function queueTracking(operation) {
+    trackingQueue = trackingQueue
+        .then(operation, operation)
+        .catch((error) => {
+            console.error("Tracking operation failed:", error);
+        });
 
-    const tabs = await chrome.tabs.query({
-        active: true,
-        windowId,
+    return trackingQueue;
+}
+
+function trackFocusedTab(windowId) {
+    return queueTracking(async () => {
+        if (windowId === chrome.windows.WINDOW_ID_NONE) {
+            await stopTracking();
+            return;
+        }
+
+        const tabs = await chrome.tabs.query({
+            active: true,
+            windowId,
+        });
+
+        if (tabs[0]?.id != null) {
+            await startTracking(tabs[0].id);
+        } else {
+            await stopTracking();
+        }
     });
-
-    if (tabs[0]?.id != null) {
-        await startTracking(tabs[0].id);
-    }
 }
 
 chrome.tabs.onActivated.addListener(({ tabId }) => {
-    startTracking(tabId);
+    queueTracking(() => startTracking(tabId));
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
     if (changeInfo.url) {
-        startTracking(tabId);
+        queueTracking(() => startTracking(tabId));
     }
 });
 
@@ -115,25 +140,39 @@ chrome.windows.onFocusChanged.addListener((windowId) => {
     trackFocusedTab(windowId);
 });
 
-chrome.runtime.onStartup.addListener(async () => {
-    const windows = await chrome.windows.getLastFocused({ populate: false });
-    if (windows?.id != null) {
-        await trackFocusedTab(windows.id);
-    }
+chrome.runtime.onStartup.addListener(() => {
+    queueTracking(async () => {
+        const window = await chrome.windows.getLastFocused({ populate: false });
+        if (window?.id != null) {
+            await trackFocusedTab(window.id);
+        }
+    });
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action !== "getTimeData") return;
 
-    (async () => {
-        const session = await getActiveSession();
-        if (session) {
-            await recordElapsedTime(session);
+    queueTracking(async () => {
+        const window = await chrome.windows.getLastFocused({ populate: false });
+
+        if (window?.id === chrome.windows.WINDOW_ID_NONE || window?.id == null) {
+            await stopTracking();
+        } else {
+            const tabs = await chrome.tabs.query({
+                active: true,
+                windowId: window.id,
+            });
+
+            if (tabs[0]?.id != null) {
+                await startTracking(tabs[0].id);
+            } else {
+                await stopTracking();
+            }
         }
 
         const result = await chrome.storage.local.get(TIME_DATA_KEY);
         sendResponse(result[TIME_DATA_KEY] || {});
-    })().catch((error) => {
+    }).catch((error) => {
         console.error("Unable to read time data:", error);
         sendResponse({});
     });
